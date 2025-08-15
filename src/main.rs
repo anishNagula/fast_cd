@@ -23,20 +23,23 @@ fn load_db(db_path: &str) -> HashMap<String, String> {
         .collect()
 }
 
-fn save_entry(db_path: &str, shortcut: &str, actual_path: &str) {
-    let mut file = OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(db_path)
-        .expect("Failed to open DB for writing");
-    writeln!(file, "{}:{}", shortcut, actual_path).expect("Failed to write entry");
+fn save_entry(db_path: &str, shortcut: &str, actual_path: &str, db: &mut HashMap<String, String>) {
+    if !db.contains_key(shortcut) {
+        let mut file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(db_path)
+            .expect("Failed to open DB for writing");
+        writeln!(file, "{}:{}", shortcut, actual_path).expect("Failed to write entry");
+        db.insert(shortcut.to_string(), actual_path.to_string());
+    }
 }
 
 fn main() {
     let file_path = env::args().nth(1).expect("Please provide a path");
     let db_path = "/Users/anishnagula/.fast_cd/data.db";
 
-    let db = load_db(db_path);
+    let mut db = load_db(db_path);
 
     let shortcut = Path::new(&file_path)
         .file_name()
@@ -44,20 +47,12 @@ fn main() {
         .to_string_lossy()
         .to_string();
 
-    if let Some(actual_path) = db.get(&shortcut) {
-        // Existing shortcut: cd to stored path
-        std::process::Command::new("sh")
-            .arg("-c")
-            .arg(format!("cd '{}' && exec $SHELL", actual_path))
-            .status()
-            .expect("Failed to run cd");
-    } else {
-        // New shortcut: save and cd to file_path
-        save_entry(db_path, &shortcut, &file_path);
-        std::process::Command::new("sh")
-            .arg("-c")
-            .arg(format!("cd '{}' && exec $SHELL", file_path))
-            .status()
-            .expect("Failed to run cd");
-    }
+    let target_path = db
+        .get(&shortcut)
+        .cloned()
+        .unwrap_or(file_path.clone());
+
+    save_entry(db_path, &shortcut, &file_path, &mut db);
+
+    println!("{}", target_path);
 }
